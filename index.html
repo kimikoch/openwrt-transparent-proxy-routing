@@ -1,0 +1,85 @@
+<h1 id="-openwrt-22-nftables">Репозиторий предназначен для настройки маршрутизации через прозрачный прокси на openwrt 22+, в которых по умолчанию используется nftables</h1>
+<p>На основе идеи по <a href="https://itdog.info/tochechnaya-marshrutizaciya-po-domenam-na-routere-s-openwrt/">точечной маршрутизации от itdog</a> решил сделать свой вариант маршрутизации трафика по доменам через прозрачный прокси.</p>
+<h3 id="-nftset-dnsmasq-full">Для работы nftset нужно установить dnsmasq-full</h3>
+<pre><code class="lang-shell">opkg update &amp;&amp; cd <span class="hljs-regexp">/tmp/</span> &amp;&amp; opkg download dnsmasq-full
+opkg remove dnsmasq &amp;&amp; opkg install dnsmasq-full --cache <span class="hljs-regexp">/tmp/</span>
+mv <span class="hljs-regexp">/etc/</span>config<span class="hljs-regexp">/dhcp-opkg /</span>etc<span class="hljs-regexp">/config/</span>dhcp
+<span class="hljs-regexp">/etc/i</span>nit.d<span class="hljs-regexp">/dnsmasq restart</span>
+</code></pre>
+<h3 id="-cdn-hufrea-byedpi-https-github-com-hufrea-byedpi-">Для ускорения ютуба и других сервисов с неисправными cdn. Будем использовать проект <a href="https://github.com/hufrea/byedpi">hufrea/byedpi</a> в режиме прозрачного прокси</h3>
+<p>Установим инструмент
+на странице <a href="https://github.com/hufrea/byedpi/releases">Releases</a> выберите нужную вам архитектуру и скопируйте ссылку на файл</p>
+<pre><code class="lang-shell">wget https:<span class="hljs-comment">//github.com/hufrea/byedpi/releases/download/v0.16.6/byedpi-16.6-aarch64.tar.gz</span>
+tar -xvf byedpi-<span class="hljs-number">16.6</span>-aarch64<span class="hljs-selector-class">.tar</span><span class="hljs-selector-class">.gz</span>
+rm byedpi-<span class="hljs-number">16.6</span>-aarch64<span class="hljs-selector-class">.tar</span><span class="hljs-selector-class">.gz</span>
+</code></pre>
+<p>Запустим, как фоновый процесс:</p>
+<pre><code class="lang-shell">./ciadpi-aarch64 -<span class="hljs-built_in">s1</span> -o1 -Ar -o1 -At - f-<span class="hljs-number">1</span> -<span class="hljs-built_in">r1</span>+s -As -E &amp;
+</code></pre>
+<p>Первый раз лучше запускать <code>./ciadpi-aarch64 -s1 -o1 -Ar -o1 -At - f-1 -r1+s -As</code> и на клиентском устройстве попробывать подключится по socks5 протоколу, по умолчанию порт 1080, <code>socks5://ip-router:1080</code></p>
+<h3 id="-nftables">Создание файла с цепочкой маршрутизации для nftables</h3>
+<p>Например файл /root/byedpi.nft</p>
+<pre><code class="lang-shell">set <span class="hljs-keyword">proxylist</span> {
+    <span class="hljs-built_in">type</span> ipv4_addr
+    <span class="hljs-literal">flags</span> interval
+    timeout <span class="hljs-number">4</span>h
+}
+
+<span class="hljs-keyword">chain</span> <span class="hljs-keyword">byedpi_prerouting</span> {
+    <span class="hljs-built_in">type</span> nat hook prerouting <span class="hljs-literal">priority</span> -<span class="hljs-number">100</span>;
+    <span class="hljs-literal">ip</span> daddr @proxylist tcp dport {<span class="hljs-number">80</span>, <span class="hljs-number">443</span>} <span class="hljs-keyword">redirect</span> <span class="hljs-keyword">to</span> 1080
+}
+</code></pre>
+<h3 id="-firewall-openwrt">Настройка firewall в openwrt</h3>
+<p>В файле <code>/etc/config/firewall</code> нужно добавить</p>
+<pre><code class="lang-shell">config <span class="hljs-keyword">include</span>
+        <span class="hljs-built_in">option</span> enabled <span class="hljs-string">'1'</span>
+        <span class="hljs-built_in">option</span> <span class="hljs-keyword">type</span> <span class="hljs-symbol">'nftables'</span>
+        <span class="hljs-built_in">option</span> path <span class="hljs-symbol">'your</span>-script-path'
+        <span class="hljs-built_in">option</span> position <span class="hljs-symbol">'table</span>-post'
+</code></pre>
+<h4 id="-your-script-path-nftables-root-byedpi-nft">Вам необходимо изменить <code>your-script-path</code> на ваш путь до файла с правилами nftables. В моём случае путь будет /root/byedpi.nft</h4>
+<p>Теперь перезапустим firewall и убедимся, что он рабоет и не возвращает ошибок</p>
+<pre><code class="lang-shell"><span class="hljs-regexp">/etc/i</span>nit.d<span class="hljs-regexp">/firewall restart</span>
+</code></pre>
+<h3 id="-dnsmasq-openwrt-">Добавление новой папки конфигурации для dnsmasq в OpenWRT:</h3>
+<h4 id="-1-etc-config-dhcp">Вариант №1 Через добавление параметра в /etc/config/dhcp</h4>
+<pre><code class="lang-shell"><span class="hljs-built_in">config</span> dnsmasq
+        option confdir <span class="hljs-string">'/etc/dnsmasq.d'</span>
+</code></pre>
+<p>После этого нужно перезапустить dnsmasq и убедиться, что он работает</p>
+<pre><code><span class="hljs-meta-keyword">/etc/</span>init.d/dnsmasq restart
+<span class="hljs-meta-keyword">/etc/</span>init.d/dnsmasq status
+</code></pre><p>Если статус <code>not running</code>, то лучше попробовать вариант 2 </p>
+<h4 id="-2-uci">Вариант №2 Через uci</h4>
+<pre><code class="lang-shell"><span class="hljs-selector-tag">uci</span> <span class="hljs-selector-tag">set</span> <span class="hljs-selector-tag">dhcp</span>.@<span class="hljs-keyword">dnsmasq</span>[<span class="hljs-keyword">0</span>].<span class="hljs-keyword">confdir</span>='/<span class="hljs-keyword">etc</span>/<span class="hljs-keyword">dnsmasq</span>.<span class="hljs-keyword">d</span>'
+uci commit dhcp
+/etc/init.d/dnsmasq restart
+</code></pre>
+<h3 id="-">Добавление списка доменов, которые будут идти через прозрачный прокси</h3>
+<p>Файл /etc/dnsmasq.d/proxylist.conf
+Например для ускорения youtube</p>
+<pre><code class="lang-shell"><span class="hljs-selector-id">#youtube</span>
+nftset=/returnyoutubedislikeapi.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtube-nocookie.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtube-ui<span class="hljs-selector-class">.l</span><span class="hljs-selector-class">.google</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtube.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtubeembeddedplayer<span class="hljs-selector-class">.googleapis</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtubei<span class="hljs-selector-class">.googleapis</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtubekids.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/wide-youtube<span class="hljs-selector-class">.l</span><span class="hljs-selector-class">.google</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/yt-video-upload<span class="hljs-selector-class">.l</span><span class="hljs-selector-class">.google</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/ytimg.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/ytimg<span class="hljs-selector-class">.l</span><span class="hljs-selector-class">.google</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/yting.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/youtu.be/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/googlevideo.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/ggpht.com/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/suggestqueries<span class="hljs-selector-class">.google</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/noifications-pa<span class="hljs-selector-class">.googleapis</span><span class="hljs-selector-class">.com</span>/<span class="hljs-number">4</span>#inet#fw4<span class="hljs-selector-id">#proxylist</span>
+nftset=/googleusercontent.com/<span class="hljs-number">4</span>#inet#fw4#proxylist
+</code></pre>
+<p>Перезапустим dnsmasq, чтобы правила применились</p>
+<pre><code class="lang-shell"><span class="hljs-regexp">/etc/i</span>nit.d<span class="hljs-regexp">/dnsmasq restart</span>
+</code></pre>
+<p>Роутер настроен, теперь нужно убедиться что ваше устройство использует роутер, как dns серевер (Иначе работать не будет)</p>
