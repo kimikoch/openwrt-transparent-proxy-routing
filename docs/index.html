@@ -1,3 +1,11 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>OpenWRT 22+ с nftables и прозрачным прокси</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
 <h1 id="-openwrt-22-nftables">Репозиторий предназначен для настройки маршрутизации через прозрачный прокси на openwrt 22+, в которых по умолчанию используется nftables</h1>
 <p>На основе идеи по <a href="https://itdog.info/tochechnaya-marshrutizaciya-po-domenam-na-routere-s-openwrt/">точечной маршрутизации от itdog</a> решил сделать свой вариант маршрутизации трафика по доменам через прозрачный прокси.</p>
 <h3 id="-nftset-dnsmasq-full">Для работы nftset нужно установить dnsmasq-full</h3>
@@ -83,3 +91,5 @@ nftset=/googleusercontent.com/<span class="hljs-number">4</span>#inet#fw4#proxyl
 <pre><code class="lang-shell"><span class="hljs-regexp">/etc/i</span>nit.d<span class="hljs-regexp">/dnsmasq restart</span>
 </code></pre>
 <p>Роутер настроен, теперь нужно убедиться что ваше устройство использует роутер, как dns серевер (Иначе работать не будет)</p>
+</body>
+</html>
